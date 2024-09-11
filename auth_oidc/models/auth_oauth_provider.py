@@ -10,11 +10,14 @@ import requests
 
 from odoo import api, exceptions, fields, models, tools
 
+
+logger = logging.getLogger(__name__)
+
 try:
     from jose import jwt
     from jose.exceptions import JWSError, JWTError
 except ImportError:
-    logging.getLogger(__name__).debug("jose library not installed")
+    logger.debug("jose library not installed")
 
 
 class AuthOauthProvider(models.Model):
@@ -139,10 +142,17 @@ class AuthOauthProviderGroupLine(models.Model):
             def __init__(self, *args, **kwargs):
                 super().__init__(Defaultdict2, *args, **kwargs)
 
-        return tools.safe_eval.safe_eval(
+        logger.error(
+            f"would safe_eval({self.expression}) with user: {user} token: {token}"
+        )
+
+        value = tools.safe_eval.safe_eval(
             self.expression,
             {
                 "user": user,
                 "token": Defaultdict2(token),
             },
         )
+
+        logger.error(f"= {value}")
+        return value

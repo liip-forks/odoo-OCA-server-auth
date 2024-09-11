@@ -95,14 +95,26 @@ class ResUsers(models.Model):
         user = self.search([("login", "=", login)])
         if user:
             group_updates = []
+            _logger.info(f"user {user}")
             for group_line in (
                 self.env["auth.oauth.provider"].browse(provider).group_line_ids
             ):
+
+                _logger.info(f"group_line {group_line}")
+                _logger.error(f"token: {validation}")
+                _logger.error(f"exrpession: {group_line.expression}")
+
                 if group_line._eval_expression(user, validation):
                     if group_line.group_id not in user.groups_id:
+                        _logger.error(
+                            f"Link user {user} to group {group_line.group_id}"
+                        )
                         group_updates.append((Command.LINK, group_line.group_id.id))
                 else:
                     if group_line.group_id in user.groups_id:
+                        _logger.error(
+                            f"UnLink user {user} from group {group_line.group_id}"
+                        )
                         group_updates.append((Command.UNLINK, group_line.group_id.id))
             if group_updates:
                 user.write({"groups_id": group_updates})
