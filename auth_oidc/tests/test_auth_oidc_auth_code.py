@@ -354,3 +354,23 @@ class TestAuthOIDCAuthorizationCodeFlow(common.HttpCase):
         self.assertTrue(
             group_line._eval_expression(self.env.user, {"mail": self.env.user.email})
         )
+
+    @responses.activate
+    def test_login_assigns_to_group(self):
+        """Test that login works and assigns to a correct group"""
+        # Take the last group
+        group = self.env("res.groups")[:1]
+        # Write a group assignment for all users in a group_line_id
+        self.env.ref("auth_oidc.local_keycloak").group_line_ids[:1].write(
+            dict(expression="True", group_id=group.id)
+        )
+        user = self._prepare_login_test_user()
+        self._prepare_login_test_responses(id_token_body={"user_id": user.login})
+
+        params = {"state": json.dumps({})}
+        with MockRequest(self.env):
+            db, login, token = self.env["res.users"].auth_oauth(
+                self.provider_rec.id,
+                params,
+            )
+        self.assertTrue(group in login.groups)
