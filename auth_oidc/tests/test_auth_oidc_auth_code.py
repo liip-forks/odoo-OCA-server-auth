@@ -138,9 +138,7 @@ class TestAuthOIDCAuthorizationCodeFlow(common.HttpCase):
     def test_login(self):
         """Test that login works"""
         user = self._prepare_login_test_user()
-        self._prepare_login_test_responses(
-            id_token_body={"user_id": user.login}, access_token={"name": "test"}
-        )
+        self._prepare_login_test_responses(id_token_body={"user_id": user.login})
 
         params = {"state": json.dumps({})}
         with MockRequest(self.env):
@@ -149,10 +147,24 @@ class TestAuthOIDCAuthorizationCodeFlow(common.HttpCase):
                 params,
             )
         self.assertEqual(login, user.login)
-        self.assertEqual(
-            login.groups,
-            [self.env["res.groups"].search([("group_id", "=", "base_group_no_one")])],
+        # By default it will be in this group
+        self.assertTrue(user.has_group("base.group_no_one"))
+
+    @responses.activate
+    def test_manager_login(self):
+        """Test that login works and assigns the user to a manager group"""
+        user = self._prepare_login_test_user()
+        self._prepare_login_test_responses(
+            id_token_body={"user_id": user.login, "groups": ["erp_manager"]}
         )
+
+        params = {"state": json.dumps({})}
+        with MockRequest(self.env):
+            db, login, token = self.env["res.users"].auth_oauth(
+                self.provider_rec.id,
+                params,
+            )
+        self.assertTrue(user.has_group("base.group_erp_manager"))
 
     @responses.activate
     def test_login_without_kid(self):
