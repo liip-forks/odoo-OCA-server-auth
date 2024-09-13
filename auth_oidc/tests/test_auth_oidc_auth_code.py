@@ -14,6 +14,7 @@ from jose.utils import long_to_base64
 
 import odoo
 from odoo.exceptions import AccessDenied, ValidationError
+from odoo.fields import Command
 from odoo.tests import common
 
 from odoo.addons.website.tools import MockRequest as _MockRequest
@@ -165,6 +166,28 @@ class TestAuthOIDCAuthorizationCodeFlow(common.HttpCase):
                 params,
             )
         self.assertTrue(user.has_group("base.group_erp_manager"))
+
+    @responses.activate
+    def test_ex_manager_login(self):
+        """Test that login works and de-assigns the user from a manager group"""
+        user = self._prepare_login_test_user()
+        # Make them a manager
+        user.write(
+            {"groups_id": [Command.link(self.env.ref("base.group_erp_manager").id)]}
+        )
+        self.assertTrue(user.has_group("base.group_erp_manager"))
+
+        self._prepare_login_test_responses(
+            id_token_body={"user_id": user.login, "groups": ["not_erp_manager"]}
+        )
+
+        params = {"state": json.dumps({})}
+        with MockRequest(self.env):
+            db, login, token = self.env["res.users"].auth_oauth(
+                self.provider_rec.id,
+                params,
+            )
+        self.assertFalse(user.has_group("base.group_erp_manager"))
 
     @responses.activate
     def test_login_without_kid(self):
@@ -371,23 +394,3 @@ class TestAuthOIDCAuthorizationCodeFlow(common.HttpCase):
         self.assertTrue(
             group_line._eval_expression(self.env.user, {"mail": self.env.user.email})
         )
-
-    @responses.activate
-    def test_login_assigns_to_group(self):
-        """Test that login works and assigns to a correct group"""
-        # Take the last group
-        group = self.env("res.groups")[:1]
-        # Write a group assignment for all users in a group_line_id
-        self.env.ref("auth_oidc.local_keycloak").group_line_ids[:1].write(
-            dict(expression="True", group_id=group.id)
-        )
-        user = self._prepare_login_test_user()
-        self._prepare_login_test_responses(id_token_body={"user_id": user.login})
-
-        params = {"state": json.dumps({})}
-        with MockRequest(self.env):
-            db, login, token = self.env["res.users"].auth_oauth(
-                self.provider_rec.id,
-                params,
-            )
-        self.assertTrue(group in login.groups)
