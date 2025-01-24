@@ -76,6 +76,9 @@ Contributors
 - Stéphane Bidoul <stephane.bidoul@acsone.eu>
 - Dan Tillinghast
 - Miku Laitinen
+- `Kencove <https://www.kencove.com/>`__:
+
+  - Mohamed Alkobrosli
 
 Maintainers
 -----------
