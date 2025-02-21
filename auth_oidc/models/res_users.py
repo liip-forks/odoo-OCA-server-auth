@@ -46,6 +46,45 @@ class ResUsers(models.Model):
         return response_json.get("access_token"), response_json.get("id_token")
 
     @api.model
+    def _auth_oauth_validate(self, provider, id_token, access_token):
+        """
+        return the validation data corresponding to the access token
+        Mostly the same as auth_oauth ResUsers._auth_oauth_validate, minus the
+        validation_endpoint
+        """
+        oauth_provider = self.env["auth.oauth.provider"].browse(provider)
+
+        # Parse the token to get validation data
+        validation = oauth_provider._parse_id_token(id_token, access_token)
+
+        if oauth_provider.data_endpoint:
+            data = super()._auth_oauth_rpc(oauth_provider.data_endpoint, access_token)
+            validation.update(data)
+        # unify subject key, pop all possible and get most sensible. When this
+        # is reworked, BC should be dropped and only the `sub` key should be
+        # used (here, in _generate_signup_values, and in _auth_oauth_signin)
+        subject = next(
+            filter(
+                None,
+                [
+                    validation.pop(key, None)
+                    for key in [
+                        "sub",  # standard
+                        "id",  # google v1 userinfo, facebook opengraph
+                        "user_id",  # google tokeninfo, odoo (tokeninfo)
+                    ]
+                ],
+            ),
+            None,
+        )
+        if not subject:
+            _logger.error("Access Denied: missing subject identity")
+            raise AccessDenied()
+        validation["user_id"] = subject
+
+        return validation
+
+    @api.model
     def auth_oauth(self, provider, params):
         oauth_provider = self.env["auth.oauth.provider"].browse(provider)
         if oauth_provider.flow == "id_token":
@@ -64,23 +103,9 @@ class ResUsers(models.Model):
         if not id_token:
             _logger.error("No id_token in response.")
             raise AccessDenied()
-        validation = oauth_provider._parse_id_token(id_token, access_token)
-        if oauth_provider.data_endpoint:
-            data = requests.get(
-                oauth_provider.data_endpoint,
-                headers={"Authorization": "Bearer %s" % access_token},
-                timeout=10,
-            ).json()
-            validation.update(data)
-        # required check
-        if "sub" in validation and "user_id" not in validation:
-            # set user_id for auth_oauth, user_id is not an OpenID Connect standard
-            # claim:
-            # https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims
-            validation["user_id"] = validation["sub"]
-        elif not validation.get("user_id"):
-            _logger.error("user_id claim not found in id_token (after mapping).")
-            raise AccessDenied()
+
+        validation = self._auth_oauth_validate(provider, id_token, access_token)
+
         # retrieve and sign in user
         params["access_token"] = access_token
         login = self._auth_oauth_signin(provider, validation, params)
