@@ -100,9 +100,16 @@ class ResUsers(models.Model):
             ):
                 if group_line._eval_expression(user, validation):
                     if group_line.group_id not in user.groups_id:
+
+                        _logger.info(
+                            f'+ Add user:{user.id} to group:{group_line.group_id.id} as expression "{group_line.expression}" matched'
+                        )
                         group_updates.append(Command.link(group_line.group_id.id))
                 else:
                     if group_line.group_id in user.groups_id:
+                        _logger.info(
+                            f'- Remove user:{user.id} from group:{group_line.group_id.id} as expression "{group_line.expression}" did not match'
+                        )
                         group_updates.append(Command.unlink(group_line.group_id.id))
             if group_updates:
                 user.write({"groups_id": group_updates})
